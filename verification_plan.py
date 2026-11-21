@@ -11,17 +11,19 @@ class Planner:
         self.failures={}
         self.observed_cpu=0.0
         self.observed_recorded=0.0
+        self.calibrated=False
 
-    def seed(self,profile,by_id):
+    def seed(self,profile,by_id,isolated=True):
         if not profile or getattr(self,'seeded',False):
             return
         self.seeded=True
+        self.calibrated=True
         setup=profile.get('setup_cpu',{})
         for node,seconds in profile.get('cpu',{}).items():
             if node in by_id and profile.get('reports',{}).get(node)=='passed':
                 # Isolated verification repeats class fixtures for each test.
                 scope=node.rsplit('::',1)[0]
-                self.case_cost[node]=max(0.0001,seconds+setup.get(scope,0.0))
+                self.case_cost[node]=max(0.0001,seconds+(setup.get(scope,0.0) if isolated else 0.0))
 
     def fixed_cost(self,path):
         if path in self.import_cost:
@@ -42,7 +44,7 @@ class Planner:
             return 1.0
 
     def choose(self,candidates,by_id,schedule):
-        if len(candidates)>220:
+        if len(candidates)>(2500 if self.calibrated else 220):
             return []
         groups={}
         for node in candidates:
@@ -55,7 +57,10 @@ class Planner:
             return sum(self.case_cost.get(node,by_id[node]['seconds']*scale) for node in nodes)
         def estimate(path,nodes):
             return self.fixed_cost(path)+case_estimate(nodes)
-        paths=sorted(groups,key=lambda path:estimate(path,groups[path]))[:6]
+        if self.calibrated:
+            for path,nodes in groups.items():
+                groups[path]=sorted(nodes,key=lambda node:-(by_id[node]['seconds']/(self.case_cost.get(node,by_id[node]['seconds']*scale)+0.005)))[:40]
+        paths=sorted(groups,key=lambda path:estimate(path,groups[path]))[:(3 if len(candidates)>220 else 6)]
         duration={test['number']:round(test['seconds']*1000) for test in by_id.values()}
         def cost(nodes):
             workers=schedule([by_id[node] for node in nodes])
@@ -69,7 +74,8 @@ class Planner:
                 if len(selected)>100:
                     continue
                 possible=original-cost(set(candidates)-set(selected))
-                confidence=min((self.successes.get(path,1.5)/(self.successes.get(path,1.5)+self.failures.get(path,1.0)) for path in subset),default=0)
+                prior=9.0 if self.calibrated else 1.5
+                confidence=min((self.successes.get(path,prior)/(self.successes.get(path,prior)+self.failures.get(path,1.0)) for path in subset),default=0)
                 # Shared imports are paid once in a fresh interpreter.
                 expected=max(self.fixed_cost(path) for path in subset)+0.02*(len(subset)-1)+case_estimate(selected)
                 margin=possible*confidence-expected*1.1
@@ -99,7 +105,11 @@ class Planner:
                 self.observed_cpu+=seconds
                 self.observed_recorded+=by_id[node]['seconds']
         for path,values in states.items():
-            if 'failed' in values:
+            if self.calibrated:
+                # This estimates individual verification yield, never patch answers.
+                self.successes[path]=self.successes.get(path,9.0)+sum(value in ('passed','observed_pass') for value in values)
+                self.failures[path]=self.failures.get(path,1.0)+sum(value=='failed' for value in values)
+            elif 'failed' in values:
                 self.failures[path]=self.failures.get(path,1.0)+1
             elif values and all(value=='passed' for value in values):
                 self.successes[path]=self.successes.get(path,1.5)+1
