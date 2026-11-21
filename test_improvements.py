@@ -1,5 +1,8 @@
 import ast
 import os
+import gzip
+import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,6 +16,36 @@ from verification_plan import Planner
 import entry
 
 class ImprovementTests(unittest.TestCase):
+    def test_profile_requires_pinned_successful_matching_runtime(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            payload={'pin':'eb11aec4be8cb2122afe713a4816662c3f0fb2fa','pytest_exit':0,'python':sys.version}
+            def write():
+                with gzip.open(root/'baseline-profile.json.gz','wt') as file:
+                    json.dump(payload,file)
+            write()
+            self.assertIsNotNone(operand_proofs.read_profile(root))
+            payload['pytest_exit']=1
+            write()
+            self.assertIsNone(operand_proofs.read_profile(root))
+            payload['pytest_exit']=0
+            payload['python']='0.0.0'
+            write()
+            self.assertIsNone(operand_proofs.read_profile(root))
+    @unittest.skipUnless(hasattr(os,'fork'),'Requires Linux fork isolation')
+    def test_isolated_verification_does_not_share_failed_test_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'sqlglot').mkdir()
+            (root/'tests').mkdir()
+            (root/'sqlglot/__init__.py').write_text('VALUE = 0\n')
+            (root/'tests/__init__.py').write_text('')
+            (root/'tests/test_state.py').write_text('import unittest\nSTATE=[]\nclass T(unittest.TestCase):\n def test_a(self):\n  STATE.append(1)\n  self.fail("failed after mutation")\n def test_b(self): self.assertEqual(STATE,[])\n')
+            names=['tests/test_state.py::T::test_a','tests/test_state.py::T::test_b']
+            tests={name:{'id':name,'number':i,'file':'tests/test_state.py','seconds':0.01} for i,name in enumerate(names)}
+            diff='diff --git a/sqlglot/__init__.py b/sqlglot/__init__.py\n--- a/sqlglot/__init__.py\n+++ b/sqlglot/__init__.py\n@@ -1 +1 @@\n-VALUE = 0\n+VALUE = 2\n'
+            selected,info=verification.refine(diff,set(names),tests,root,force=True,wall_budget=3)
+            self.assertEqual(selected,{names[0]},info)
     def test_value_relationships_and_custom_equality(self):
         class Custom:
             def __eq__(self,other):

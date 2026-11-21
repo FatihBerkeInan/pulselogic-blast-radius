@@ -121,7 +121,7 @@ def run_tests(request,workspace):
         loaded=[(member,loader.loadTestsFromName(member[1])) for member in group]
         log.write(json.dumps({'phase':'load','file':group[0][0].split('::')[0],
                               'seconds':time.process_time()-load_start,'cpu':time.process_time()-START_CPU})+'\n')
-        if request.get('isolate_tests',True) and hasattr(os,'fork'):
+        if request.get('isolate_tests',True) and hasattr(os,'fork') and len(loaded)>1:
             # Only imports are shared. Every test gets pristine class/module state
             # and its own setup, body, cleanup, and timer in a forked process.
             import signal

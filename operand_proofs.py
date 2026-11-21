@@ -3,6 +3,7 @@ import ast
 import copy
 import gzip
 import json
+import sys
 from pathlib import Path
 
 ALLOWED={'Is','IsNot','Eq','NotEq'}
@@ -47,7 +48,12 @@ def read_profile(root):
     if not path.is_file():
         return None
     with gzip.open(path,'rt',encoding='utf-8') as file:
-        return json.load(file)
+        profile=json.load(file)
+    expected='eb11aec4be8cb2122afe713a4816662c3f0fb2fa'
+    version='.'.join(map(str,sys.version_info[:2]))
+    if profile.get('pin')!=expected or profile.get('pytest_exit')!=0 or not profile.get('python','').startswith(version+'.'):
+        return None
+    return profile
 
 def unsafe_tests(dependencies,source):
     """Do not infer nonexecution when a test inspects source or launches a child."""
