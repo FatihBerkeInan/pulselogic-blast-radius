@@ -27,7 +27,10 @@ def relationship(left,right):
     """Encode identity and value equality only when equality cannot run user code."""
     lt,rt=type(left),type(right)
     pure=(type(None),bool,int,float,str,bytes)
-    if lt in pure and rt in pure:
+    def builtin_comparison(kind):
+        return any(issubclass(kind,base) and getattr(kind,'__eq__',None) is base.__eq__
+                   and getattr(kind,'__ne__',None) is base.__ne__ for base in pure)
+    if builtin_comparison(lt) and builtin_comparison(rt):
         equality=left == right
     elif (getattr(lt,'__eq__',None) is object.__eq__ and getattr(rt,'__eq__',None) is object.__eq__
           and getattr(lt,'__ne__',None) is object.__ne__ and getattr(rt,'__ne__',None) is object.__ne__):
@@ -112,7 +115,7 @@ def main():
             elif report.when=='call':
                 REPORTS.setdefault(report.nodeid,report.outcome)
     status=pytest.main(['tests','-q','--tb=short','-p','no:cacheprovider'],plugins=[Measurement()])
-    payload={'pin':'eb11aec4be8cb2122afe713a4816662c3f0fb2fa','python':sys.version,
+    payload={'pin':'eb11aec4be8cb2122afe713a4816662c3f0fb2fa','python':sys.version,'relationship_version':2,
              'facts':FACTS,'cpu':CPU,'setup_cpu':SETUP_CPU,'reports':REPORTS,'pytest_exit':int(status)}
     from operand_proofs import unsafe_tests
     with gzip.open(ROOT/'dependencies.json.gz','rt',encoding='utf-8') as file:
