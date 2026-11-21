@@ -8,6 +8,6 @@ RUN python -m pip install --no-cache-dir -r requirements.lock
 COPY fetch_source.py ./
 RUN python fetch_source.py
 ENV PYTHONDONTWRITEBYTECODE=1
-COPY entry.py operand_proofs.py attribute_dependencies.py statement_scope.py verification_plan.py verification.py verify_worker.py execution_support.py network_guard.py ./
+COPY entry.py operand_proofs.py semantic_proofs.py attribute_dependencies.py statement_scope.py verification_plan.py verification.py verify_worker.py execution_support.py network_guard.py ./
 COPY *.json.gz ./
 CMD ["python", "/app/entry.py"]

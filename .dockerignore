@@ -16,6 +16,7 @@
 !profile_baseline.py
 !baseline-profile.json.gz
 !Dockerfile.profile
+!semantic_proofs.py
 
 !statement_scope.py
 !verification_plan.py

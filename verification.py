@@ -68,7 +68,8 @@ def refine(text,candidates,by_id,source,profile=None,wall_budget=3.0,force=False
     # Expensive tests stay scheduled; only their measured cheap tail is run here.
     from verification_plan import Planner
     planner=PLANNERS.setdefault(str(source),Planner(source))
-    planner.seed(profile,by_id,isolated=os.name!='nt' and os.environ.get('VERIFY_ISOLATE','1')=='1')
+    if os.environ.get('VERIFY_CALIBRATE','0')=='1':
+        planner.seed(profile,by_id,isolated=os.name!='nt' and os.environ.get('VERIFY_ISOLATE','1')=='1')
     cheap=planner.choose(candidates,by_id,schedule)
     if force:
         cheap=sorted(candidates)

@@ -51,7 +51,8 @@ def read_profile(root):
         profile=json.load(file)
     expected='eb11aec4be8cb2122afe713a4816662c3f0fb2fa'
     version='.'.join(map(str,sys.version_info[:2]))
-    if profile.get('pin')!=expected or profile.get('pytest_exit')!=0 or not profile.get('python','').startswith(version+'.'):
+    if (profile.get('pin')!=expected or profile.get('pytest_exit')!=0
+        or profile.get('relationship_version')!=2 or not profile.get('python','').startswith(version+'.')):
         return None
     return profile
 

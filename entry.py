@@ -228,6 +228,18 @@ def main():
             ids = selector.select(text)
             if os.environ.get('OPERAND_PROOFS','1')=='1' and profile and 'unsafe_tests' in profile:
                 ids=narrow(text,ids,SOURCE,profile,unsafe)
+            if ids and profile and os.environ.get('SEMANTIC_PROOFS','1')=='1':
+                from semantic_proofs import equivalent_patch
+                if equivalent_patch(text,SOURCE):
+                    retained=(unsafe|{node for node in selector.all_ids if profile.get('reports',{}).get(node)!='passed'})&selector.all_ids
+                    # Preserve reflective tests even if line coverage did not select them.
+                    # Do not replace an already cheaper selection with the guard set.
+                    duration={test['number']:round(test['seconds']*1000) for test in tests}
+                    def cost(nodes):
+                        workers=schedule([selector.by_id[node] for node in nodes])
+                        return max((sum(duration[n] for n in worker) for worker in workers),default=0)+2000*len(workers)
+                    if cost(retained)+100<cost(ids):
+                        ids=retained
             info={'cpu':0,'passed':0}
             remaining=verification_deadline-time.monotonic()
             if os.environ.get('VERIFY','1')=='1' and remaining>0.1:

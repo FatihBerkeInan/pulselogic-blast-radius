@@ -3,6 +3,7 @@ import os
 import gzip
 import json
 import sys
+from enum import Enum
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,14 +13,34 @@ import profile_baseline
 import verification
 import attribute_dependencies
 import statement_scope
+import semantic_proofs
 from verification_plan import Planner
 import entry
 
 class ImprovementTests(unittest.TestCase):
+    def test_compiler_rename_checks_arguments_values_and_reflection(self):
+        def agrees(before,after):
+            return semantic_proofs.code_equal(compile(before,'x.py','exec'),compile(after,'x.py','exec'))
+        old='def f(value):\n local = value + 1\n return local\n'
+        new='def f(value):\n renamed = value + 1\n return renamed\n'
+        self.assertTrue(agrees(old,new))
+        self.assertFalse(agrees(old,new.replace('value + 1','value + 2')))
+        self.assertFalse(agrees('def f(a):\n return a\n','def f(b):\n return b\n'))
+        self.assertFalse(agrees('def f():\n a = 1\n return locals()\n','def f():\n b = 1\n return locals()\n'))
+        self.assertFalse(agrees('def f():\n a = False\n return a\n','def f():\n b = 0\n return b\n'))
+        self.assertFalse(agrees('def f(flag):\n if flag: local=1\n return local\n','def f(flag):\n if flag: renamed=1\n return renamed\n'))
+    def test_compiler_rename_patch_requires_matching_lines(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'sqlglot').mkdir()
+            (root/'sqlglot/x.py').write_text('def f():\n a = 1\n return a\n')
+            diff='diff --git a/sqlglot/x.py b/sqlglot/x.py\n--- a/sqlglot/x.py\n+++ b/sqlglot/x.py\n@@ -1,3 +1,3 @@\n def f():\n- a = 1\n- return a\n+ b = 1\n+ return b\n'
+            self.assertTrue(semantic_proofs.equivalent_patch(diff,root))
+            self.assertFalse(semantic_proofs.equivalent_patch(diff.replace('+ b = 1','+ b = 2'),root))
     def test_profile_requires_pinned_successful_matching_runtime(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            payload={'pin':'eb11aec4be8cb2122afe713a4816662c3f0fb2fa','pytest_exit':0,'python':sys.version}
+            payload={'pin':'eb11aec4be8cb2122afe713a4816662c3f0fb2fa','pytest_exit':0,'python':sys.version,'relationship_version':2}
             def write():
                 with gzip.open(root/'baseline-profile.json.gz','wt') as file:
                     json.dump(payload,file)
@@ -47,6 +68,15 @@ class ImprovementTests(unittest.TestCase):
             selected,info=verification.refine(diff,set(names),tests,root,force=True,wall_budget=3)
             self.assertEqual(selected,{names[0]},info)
     def test_value_relationships_and_custom_equality(self):
+        class TextChoice(str,Enum):
+            A='a'
+            B='b'
+        self.assertEqual(profile_baseline.relationship(TextChoice.A,TextChoice.A),8)
+        self.assertEqual(profile_baseline.relationship(TextChoice.A,TextChoice.B),1)
+        class CustomText(str):
+            def __eq__(self,other):
+                raise AssertionError('Do not invoke custom string equality')
+        self.assertEqual(profile_baseline.relationship(CustomText('a'),TextChoice.A),16)
         class Custom:
             def __eq__(self,other):
                 raise AssertionError('Do not call arbitrary equality')
