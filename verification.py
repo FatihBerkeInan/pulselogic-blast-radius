@@ -68,6 +68,7 @@ def refine(text,candidates,by_id,source,profile=None,wall_budget=3.0,force=False
     # Expensive tests stay scheduled; only their measured cheap tail is run here.
     from verification_plan import Planner
     planner=PLANNERS.setdefault(str(source),Planner(source))
+    planner.seed(profile,by_id)
     cheap=planner.choose(candidates,by_id,schedule)
     if force:
         cheap=sorted(candidates)
@@ -80,7 +81,10 @@ def refine(text,candidates,by_id,source,profile=None,wall_budget=3.0,force=False
         before=usage.ru_utime+usage.ru_stime
     with tempfile.TemporaryDirectory(prefix='blast-verify-') as directory:
         tree=prepared_tree(source,replacements)
-        request={'source':str(source),'workspace':directory,'tree':str(tree),'replacements':replacements,'tests':cheap}
+        measured=(profile or {}).get('cpu',{})
+        budgets={node:max(0.5,min(5.0,0.25+3*measured.get(node,by_id[node]['seconds']))) for node in cheap}
+        request={'source':str(source),'workspace':directory,'tree':str(tree),'replacements':replacements,'tests':cheap,
+                 'isolate_tests':os.environ.get('VERIFY_ISOLATE','1')=='1','budgets':budgets}
         start=time.perf_counter()
         errors=open(Path(directory)/'stderr.log','wb')
         process=subprocess.Popen([sys.executable,str(ROOT/'verify_worker.py')],stdin=subprocess.PIPE,

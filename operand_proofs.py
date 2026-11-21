@@ -61,6 +61,9 @@ def unsafe_tests(dependencies,source):
         except (OSError,SyntaxError):
             continue
         for node in ast.walk(tree):
+            if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in ('setUpModule','tearDownModule','setup_module','teardown_module'):
+                if path.startswith('tests/'):
+                    unsafe.update(test for test in dependencies.get('reports',{}) if test.split('::')[0]==path)
             if isinstance(node,ast.Attribute) and (node.attr=='__code__' or node.attr.startswith('co_')):
                 if path.startswith('tests/'):
                     unsafe.update(test for test in dependencies.get('reports',{}) if test.split('::')[0]==path)

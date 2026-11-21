@@ -206,6 +206,13 @@ class Selector:
 
 def main():
     started=time.process_time()
+    def cgroup_cpu():
+        try:
+            fields=dict(line.split() for line in Path('/sys/fs/cgroup/cpu.stat').read_text().splitlines())
+            return int(fields['usage_usec'])/1_000_000
+        except (OSError,ValueError,KeyError):
+            return None
+    cgroup_started=cgroup_cpu()
     data = Path(os.environ.get('DATA_DIR', '/data'))
     tests = json.loads((data / 'tests.json').read_text('utf-8'))['tests']
     selector = Selector(tests, load_map())
@@ -236,7 +243,9 @@ def main():
         print(f'{patch.stem}: {len(ids)} tests, {len(workers)} workers; verified {info["passed"]} passed; cpu {info["cpu"]:.4f}', file=sys.stderr)
         if info.get('error'):
             print(f'{patch.stem}: verifier detail {info["error"][-220:]}',file=sys.stderr)
-    print('CPU_METRICS '+json.dumps({'parent':time.process_time()-started,'children':child_seconds}),file=sys.stderr)
+    cgroup_ended=cgroup_cpu()
+    print('CPU_METRICS '+json.dumps({'parent':time.process_time()-started,'children':child_seconds,
+          'cgroup':cgroup_ended-cgroup_started if cgroup_started is not None and cgroup_ended is not None else None}),file=sys.stderr)
 
 if __name__ == '__main__':
     main()

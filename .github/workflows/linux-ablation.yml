@@ -1,0 +1,30 @@
+name: Linux verification comparison
+on:
+  push:
+    branches: [experiments/isolated-verifier]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned runtime
+        run: docker build --platform linux/amd64 --tag pulselogic .
+      - name: Run original selector tests in Linux
+        run: |
+          docker run --rm --network none --read-only --user 65534:65534 --tmpfs /tmp:rw,size=64m -v "$PWD/test_entry.py:/app/test_entry.py:ro" -v "$PWD/test_improvements.py:/app/test_improvements.py:ro" -v "$PWD/profile_baseline.py:/app/profile_baseline.py:ro" pulselogic python -m unittest -v test_entry test_improvements
+      - name: Download official public validation inputs
+        run: |
+          curl --fail --location https://www.joinbuilders.org/buildathon/tracks/blast-radius/files/blast-radius-sample.tar.gz --output /tmp/official-sample.tar.gz
+          mkdir official-sample
+          tar -xzf /tmp/official-sample.tar.gz -C official-sample
+      - name: Compare verification policies
+        run: python3 benchmark_container.py --sample official-sample/sample --scorer official-sample/score.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-verification-comparison
+          path: linux-ablation.json

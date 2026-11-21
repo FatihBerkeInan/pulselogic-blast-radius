@@ -12,6 +12,17 @@ class Planner:
         self.observed_cpu=0.0
         self.observed_recorded=0.0
 
+    def seed(self,profile,by_id):
+        if not profile or getattr(self,'seeded',False):
+            return
+        self.seeded=True
+        setup=profile.get('setup_cpu',{})
+        for node,seconds in profile.get('cpu',{}).items():
+            if node in by_id and profile.get('reports',{}).get(node)=='passed':
+                # Isolated verification repeats class fixtures for each test.
+                scope=node.rsplit('::',1)[0]
+                self.case_cost[node]=max(0.0001,seconds+setup.get(scope,0.0))
+
     def fixed_cost(self,path):
         if path in self.import_cost:
             return self.import_cost[path]

@@ -107,19 +107,52 @@ def run_tests(request,workspace):
         else:
             scope_failed[0]=True
     install_inline_pools(fast_fail=True,on_error=task_failed)
-    for group in groups.values():
+    def execute(group,suite):
         statuses.clear()
         scope_failed[0]=False
-        load_start=time.process_time()
-        suite=unittest.TestSuite(loader.loadTestsFromName(dotted) for node,dotted in group)
-        log.write(json.dumps({'phase':'load','file':group[0][0].split('::')[0],
-                              'seconds':time.process_time()-load_start,'cpu':time.process_time()-START_CPU})+'\n')
         suite.run(Result())
         # A success is committed only after the module/class cleanup finishes.
         module_failed=any(state=='failed' for state in statuses.values())
         for node,state in list(statuses.items()):
             if node in lookup.values() and state=='passed' and not scope_failed[0]:
                 report(node,'observed_pass' if module_failed else 'passed')
+    for group in groups.values():
+        load_start=time.process_time()
+        loaded=[(member,loader.loadTestsFromName(member[1])) for member in group]
+        log.write(json.dumps({'phase':'load','file':group[0][0].split('::')[0],
+                              'seconds':time.process_time()-load_start,'cpu':time.process_time()-START_CPU})+'\n')
+        if request.get('isolate_tests',True) and hasattr(os,'fork'):
+            # Only imports are shared. Every test gets pristine class/module state
+            # and its own setup, body, cleanup, and timer in a forked process.
+            import signal
+            for member,suite in loaded:
+                node=member[0]
+                pid=os.fork()
+                if pid==0:
+                    globals()['START_CPU']=time.process_time()
+                    expired=[False]
+                    def alarm(signum,frame):
+                        expired[0]=True
+                        raise TimeoutError('Per-test verification budget exhausted')
+                    signal.signal(signal.SIGALRM,alarm)
+                    signal.setitimer(signal.ITIMER_REAL,request.get('budgets',{}).get(node,2.0))
+                    code=0
+                    try:
+                        execute([member],unittest.TestSuite([suite]))
+                        signal.setitimer(signal.ITIMER_REAL,0)
+                        if expired[0]:
+                            report(node,'failed')
+                    except BaseException:
+                        signal.setitimer(signal.ITIMER_REAL,0)
+                        report(node,'failed')
+                        code=2
+                    log.close()
+                    os._exit(code)
+                _,status=os.waitpid(pid,0)
+                if status:
+                    report(node,'failed')
+        else:
+            execute(group,unittest.TestSuite(suite for member,suite in loaded))
     log.close()
 
 if __name__=='__main__':
