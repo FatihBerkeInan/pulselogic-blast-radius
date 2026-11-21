@@ -23,8 +23,17 @@ jobs:
           tar -xzf /tmp/official-sample.tar.gz -C official-sample
       - name: Compare verification policies
         run: python3 benchmark_container.py --sample official-sample/sample --scorer official-sample/score.py
+      - name: Validate fresh operator edits and local renames offline
+        run: |
+          mkdir holdout-output
+          chmod 777 holdout-output
+          for method in operator rename; do
+            docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --user 65534:65534 --tmpfs /tmp:rw,size=64m -v "$PWD/official-sample/sample:/app/sample:ro" -v "$PWD/validate_semantic_holdouts.py:/app/validate_semantic_holdouts.py:ro" -v "$PWD/holdout-output:/out" pulselogic python validate_semantic_holdouts.py --method "$method" --output "/out/$method.json"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: linux-verification-comparison
-          path: linux-ablation.json
+          path: |
+            linux-ablation.json
+            holdout-output/*.json

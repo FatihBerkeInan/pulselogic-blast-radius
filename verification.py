@@ -84,6 +84,8 @@ def refine(text,candidates,by_id,source,profile=None,wall_budget=3.0,force=False
         tree=prepared_tree(source,replacements)
         measured=(profile or {}).get('cpu',{})
         budgets={node:max(0.5,min(5.0,0.25+3*measured.get(node,by_id[node]['seconds']))) for node in cheap}
+        if force:
+            budgets={node:wall_budget for node in cheap}
         request={'source':str(source),'workspace':directory,'tree':str(tree),'replacements':replacements,'tests':cheap,
                  'isolate_tests':os.environ.get('VERIFY_ISOLATE','1')=='1','budgets':budgets}
         start=time.perf_counter()
