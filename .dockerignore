@@ -15,6 +15,7 @@
 !network_guard.py
 !profile_baseline.py
 !baseline-profile.json.gz
+!Dockerfile.profile
 
 !statement_scope.py
 !verification_plan.py

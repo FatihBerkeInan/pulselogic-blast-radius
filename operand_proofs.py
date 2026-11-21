@@ -61,12 +61,15 @@ def unsafe_tests(dependencies,source):
         except (OSError,SyntaxError):
             continue
         for node in ast.walk(tree):
+            if isinstance(node,ast.Attribute) and (node.attr=='__code__' or node.attr.startswith('co_')):
+                if path.startswith('tests/'):
+                    unsafe.update(test for test in dependencies.get('reports',{}) if test.split('::')[0]==path)
             if not isinstance(node,ast.Call):
                 continue
             function=node.func
             name=function.id if isinstance(function,ast.Name) else function.attr if isinstance(function,ast.Attribute) else ''
             owner=function.value.id if isinstance(function,ast.Attribute) and isinstance(function.value,ast.Name) else ''
-            risky=(name in ('getsource','getsourcelines','run_path','Popen','check_output','check_call')
+            risky=(name in ('getsource','getsourcelines','run_path','Popen','check_output','check_call','settrace','setprofile','dis','get_instructions')
                    or (name=='parse' and owner=='ast') or owner=='subprocess')
             if risky:
                 for line in range(node.lineno,node.end_lineno+1):

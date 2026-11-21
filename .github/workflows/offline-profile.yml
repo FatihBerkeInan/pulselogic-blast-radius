@@ -1,0 +1,23 @@
+name: Offline pristine comparison profile
+on:
+  push:
+    branches: [experiments/offline-profile]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate profile with all execution networking disabled
+        run: |
+          docker build --platform linux/amd64 --file Dockerfile.profile --tag pulselogic-profile .
+          container=$(docker create pulselogic-profile)
+          docker cp "$container:/app/baseline-profile.json.gz" baseline-profile.json.gz
+          docker rm "$container"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pristine-comparison-profile
+          path: baseline-profile.json.gz
